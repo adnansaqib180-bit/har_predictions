@@ -1,30 +1,15 @@
-import streamlit as st
-import pandas as pd
+import joblib
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
+import streamlit as st
 
-# ============================================================
-# PAGE CONFIG
-# ============================================================
 st.set_page_config(
     page_title="HAR - Human Activity Recognition",
     page_icon="🏃",
-    layout="wide"
+    layout="wide",
 )
 
-# ============================================================
-# EXPECTED COLUMNS (UCI HAR - 561 features + 'subject')
-# ============================================================
-# ---- YAHAN APNI EXPECTED COLUMNS LIST DALO ----
-# List bohot lambi hai (561 columns), is liye ise hardcode karne ke bajaye
-# ek file se load karna behtar hai. Apne training data se ye command chala kar
-# poori list nikalo aur ek text file me save karo (ek column per line):
-#
-#     with open("expected_columns.txt", "w") as f:
-#         f.write("\n".join(X_train.columns.tolist()))
-#
-# Phir neeche wala path apni file ke path se replace kar do.
-EXPECTED_COLUMNS_FILE = "expected_columns.txt"  # <-- YAHAN apni expected_columns.txt ka PATH dalo
+EXPECTED_COLUMNS_FILE = "expected_columns.txt"
 
 
 @st.cache_data
@@ -40,22 +25,19 @@ def load_expected_columns(path):
 
 
 def validate_csv(df, expected_cols):
-    """Simple exact match check: uploaded CSV me sab expected columns hone chahiye."""
     missing_cols = [c for c in expected_cols if c not in df.columns]
     is_valid = len(missing_cols) == 0
     return is_valid, missing_cols
 
 
-# ============================================================
-# MODEL LOADING (aapko yahan apna model/pipeline load karna hai)
-# ============================================================
+@st.cache_data
+def convert_df_to_csv(df):
+    return df.to_csv(index=False).encode("utf-8")
+
+
 @st.cache_resource
 def load_model():
-    # -------- YAHAN APNA MODEL PATH DALO --------
-    # Example: model = joblib.load("path/to/model.pkl")
-    import joblib
-    # Example: model = tf.keras.models.load_model("path/to/model.h5")
-    model = joblib.load("stacked_model.pkl")  # <-- isko replace karo apne loaded model se
+    model = joblib.load("stacked_model.pkl")
     return model
 
 
@@ -79,14 +61,10 @@ ACTIVITY_EMOJIS = {
 
 model = load_model()
 
-# ============================================================
-# SIDEBAR
-# ============================================================
 st.sidebar.title("⚙️ Controls")
 
 data_source = st.sidebar.radio(
-    "Data source chuno:",
-    ["Upload CSV", "Sample Data"]
+    "Data source chuno:", ["Upload CSV", "Sample Data"]
 )
 
 with st.sidebar.expander("ℹ️ About this project"):
@@ -95,33 +73,28 @@ with st.sidebar.expander("ℹ️ About this project"):
         "human activity predict karti hai using a trained ML model."
     )
 
-# ============================================================
-# MAIN TITLE
-# ============================================================
 st.title("🏃 Human Activity Recognition (HAR)")
 st.caption("Mobile sensor data se activity prediction — Streamlit GUI")
 
 sensor_df = None
 
-# ============================================================
-# INPUT SECTION
-# ============================================================
 if data_source == "Upload CSV":
     st.subheader("📁 Upload Sensor Data (CSV)")
 
     expected_cols = load_expected_columns(EXPECTED_COLUMNS_FILE)
 
-    # Sample template download button (agar expected columns load ho chuki hain)
     if expected_cols:
         template_df = pd.DataFrame(columns=expected_cols)
         st.download_button(
             "⬇️ Download Sample CSV Template",
             data=template_df.to_csv(index=False),
             file_name="har_sample_template.csv",
-            mime="text/csv"
+            mime="text/csv",
         )
 
-    uploaded_file = st.file_uploader("CSV file upload karo (template wale format me)", type=["csv"])
+    uploaded_file = st.file_uploader(
+        "CSV file upload karo (template wale format me)", type=["csv"]
+    )
 
     if uploaded_file is not None:
         try:
@@ -132,7 +105,6 @@ if data_source == "Upload CSV":
 
         if raw_df is not None:
             if not expected_cols:
-                # EXPECTED_COLUMNS_FILE set nahi ki gayi -> koi validation nahi
                 sensor_df = raw_df
                 st.success(f"File loaded! Shape: {sensor_df.shape}")
                 st.dataframe(sensor_df.head())
@@ -142,7 +114,8 @@ if data_source == "Upload CSV":
                     st.error(
                         f"❌ Ye CSV required format se match nahi karti "
                         f"({len(missing_cols)} column(s) missing hain). "
-                        f"Upar se sample template download kar ke usi format me data daalo."
+                        f"Upar se sample template download kar ke usi format me data"
+                        " daalo."
                     )
                     sensor_df = None
                 else:
@@ -153,19 +126,14 @@ if data_source == "Upload CSV":
 elif data_source == "Sample Data":
     st.subheader("🧪 Sample Data")
 
-    # ---- YAHAN APNI REAL SAMPLE CSV KA PATH DALO (recommended) ----
-    # Ye file chand real test rows honi chahiye (sahi 561/172 columns ke sath),
-    # jinhe aap apne original dataset (jaise X_test.csv) se nikaal kar bana sakte hain.
-    SAMPLE_DATA_FILE = ""  # <-- e.g. "sample_rows.csv"
-
+    SAMPLE_DATA_FILE = ""
     expected_cols = load_expected_columns(EXPECTED_COLUMNS_FILE)
 
     if SAMPLE_DATA_FILE:
         try:
             sample_source_df = pd.read_csv(SAMPLE_DATA_FILE)
             sample_choice = st.selectbox(
-                "Ek sample row choose karo:",
-                sample_source_df.index.tolist()
+                "Ek sample row choose karo:", sample_source_df.index.tolist()
             )
             sensor_df = sample_source_df.loc[[sample_choice]]
             if expected_cols:
@@ -190,22 +158,6 @@ elif data_source == "Sample Data":
         st.info("Pehle EXPECTED_COLUMNS_FILE ya SAMPLE_DATA_FILE set karo.")
         sensor_df = None
 
-# ============================================================
-# VISUALIZATION SECTION
-# ============================================================
-if sensor_df is not None and len(sensor_df) > 1:
-    st.subheader("📊 Sensor Readings Over Time")
-    fig, ax = plt.subplots(figsize=(10, 4))
-    for col in sensor_df.columns:
-        ax.plot(sensor_df[col].values, label=col)
-    ax.set_xlabel("Time Step")
-    ax.set_ylabel("Value")
-    ax.legend()
-    st.pyplot(fig)
-
-# ============================================================
-# PREDICTION SECTION
-# ============================================================
 st.subheader("🔮 Prediction")
 
 if sensor_df is not None:
@@ -220,17 +172,32 @@ if sensor_df is not None:
         st.write(f"Confidence: **{confidence * 100:.1f}%**")
 
         st.subheader("📈 Class Probabilities")
-        prob_df = pd.DataFrame({
-            "Activity": list(probs.keys()),
-            "Probability": list(probs.values())
-        }).sort_values("Probability", ascending=False)
+        prob_df = pd.DataFrame(
+            {"Activity": list(probs.keys()), "Probability": list(probs.values())}
+        ).sort_values("Probability", ascending=False)
 
         st.bar_chart(prob_df.set_index("Activity"))
-else:
-    st.info("Pehle upload / manual / sample se data provide karo, phir predict karo.")
 
-# ============================================================
-# FOOTER
-# ============================================================
+        st.markdown("---")
+        st.subheader("📥 Download Predictions")
+
+        results_df = sensor_df.copy()
+        results_df["Predicted_Activity"] = predicted_label
+        results_df["Confidence_Score"] = confidence
+
+        csv_data = convert_df_to_csv(results_df)
+
+        st.download_button(
+            label="⬇️ Download Predictions CSV",
+            data=csv_data,
+            file_name="har_predictions_output.csv",
+            mime="text/csv",
+            type="secondary",
+        )
+else:
+    st.info(
+        "Pehle upload / manual / sample se data provide karo, phir predict karo."
+    )
+
 st.markdown("---")
 st.caption("Made by ❤️ adnan")
