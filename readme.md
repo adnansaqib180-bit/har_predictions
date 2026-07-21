@@ -32,8 +32,8 @@ A clean, interactive Streamlit web application that predicts human physical acti
 ├── expected_columns.txt     # List of required sensor feature names
 ├── requirements.txt         # Required Python packages
 └── README.md                # Project documentation
-                             # furthure models that were stack
-
-## project link
-
-[link](https://har-predictions.streamlit.app/)
+```
+# project link 
+----------------------
+[see my project live here ](https://har-predictions.streamlit.app/)
+=
