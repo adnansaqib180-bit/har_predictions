@@ -43,12 +43,15 @@ def load_model():
 
 def predict_activity(model, data):
     preds = model.predict(data)
-    dummy_labels = ["Walking", "Running", "Sitting", "Standing", "Lying"]
-    dummy_probs = {label: float(np.random.rand()) for label in dummy_labels}
-    total = sum(dummy_probs.values())
-    dummy_probs = {k: v / total for k, v in dummy_probs.items()}
-    predicted_label = max(dummy_probs, key=dummy_probs.get)
-    return predicted_label, dummy_probs
+    
+    if hasattr(model, "predict_proba"):
+        probs_matrix = model.predict_proba(data)
+        classes = model.classes_
+    else:
+        probs_matrix = None
+        classes = None
+        
+    return preds, probs_matrix, classes
 
 
 ACTIVITY_EMOJIS = {
@@ -57,6 +60,8 @@ ACTIVITY_EMOJIS = {
     "Sitting": "🪑",
     "Standing": "🧍",
     "Lying": "🛌",
+    "Walking_Upstairs": "🧗",
+    "Walking_Downstairs": "📉",
 }
 
 model = load_model()
@@ -113,9 +118,7 @@ if data_source == "Upload CSV":
                 if not is_valid:
                     st.error(
                         f"❌ Ye CSV required format se match nahi karti "
-                        f"({len(missing_cols)} column(s) missing hain). "
-                        f"Upar se sample template download kar ke usi format me data"
-                        " daalo."
+                        f"({len(missing_cols)} column(s) missing hain)."
                     )
                     sensor_df = None
                 else:
@@ -145,9 +148,7 @@ elif data_source == "Sample Data":
             sensor_df = None
     elif expected_cols:
         st.warning(
-            "⚠️ Abhi tak koi real sample file connect nahi hui, is liye ye "
-            "**synthetic/placeholder data** hai (sirf demo ke liye), asli sensor "
-            "readings nahi. Real sample dikhane ke liye `SAMPLE_DATA_FILE` set karo."
+            "⚠️ Synthetic placeholder data showing for demo."
         )
         np.random.seed(42)
         sensor_df = pd.DataFrame(
@@ -162,28 +163,39 @@ st.subheader("🔮 Prediction")
 
 if sensor_df is not None:
     if st.button("Predict Activity", type="primary"):
-        predicted_label, probs = predict_activity(model, sensor_df)
+        preds, probs_matrix, classes = predict_activity(model, sensor_df)
 
-        emoji = ACTIVITY_EMOJIS.get(predicted_label, "❓")
-        st.markdown(f"## {emoji} Predicted Activity: **{predicted_label}**")
+        results_df = sensor_df.copy()
+        results_df["Predicted_Activity"] = preds
 
-        confidence = probs[predicted_label]
-        st.progress(confidence)
-        st.write(f"Confidence: **{confidence * 100:.1f}%**")
+        if probs_matrix is not None:
+            confidences = np.max(probs_matrix, axis=1)
+            results_df["Confidence_Score"] = confidences
+        else:
+            confidences = None
 
-        st.subheader("📈 Class Probabilities")
-        prob_df = pd.DataFrame(
-            {"Activity": list(probs.keys()), "Probability": list(probs.values())}
-        ).sort_values("Probability", ascending=False)
+        first_pred = str(preds[0])
+        emoji = ACTIVITY_EMOJIS.get(first_pred, "❓")
 
-        st.bar_chart(prob_df.set_index("Activity"))
+        if len(preds) == 1:
+            st.markdown(f"## {emoji} Predicted Activity: **{first_pred}**")
+            if confidences is not None:
+                conf = confidences[0]
+                st.progress(float(conf))
+                st.write(f"Confidence: **{conf * 100:.1f}%**")
+
+                st.subheader("📈 Class Probabilities")
+                prob_dict = dict(zip(classes, probs_matrix[0]))
+                prob_df = pd.DataFrame(
+                    {"Activity": list(prob_dict.keys()), "Probability": list(prob_dict.values())}
+                ).sort_values("Probability", ascending=False)
+                st.bar_chart(prob_df.set_index("Activity"))
+        else:
+            st.success(f"✅ Total {len(preds)} rows predict ho gayi hain!")
+            st.dataframe(results_df[["Predicted_Activity"] + (["Confidence_Score"] if confidences is not None else [])].head(10))
 
         st.markdown("---")
         st.subheader("📥 Download Predictions")
-
-        results_df = sensor_df.copy()
-        results_df["Predicted_Activity"] = predicted_label
-        results_df["Confidence_Score"] = confidence
 
         csv_data = convert_df_to_csv(results_df)
 
