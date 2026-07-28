@@ -19,8 +19,8 @@ A clean, interactive Streamlit web application that predicts human physical acti
 
 - **Frontend / UI:** Streamlit
 - **Data Processing:** Pandas, NumPy
-- **Machine Learning Integration:** Scikit-Learn / Joblib
-- **Language:** Python 3.x
+- **Machine Learning Integration:** Scikit-Learn (version 9.6.0)/ Joblib
+- **Language:** Python 3.14.0
 
 ---
 
